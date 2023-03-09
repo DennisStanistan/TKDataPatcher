@@ -3,7 +3,6 @@ using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 namespace TKDataPatcher
@@ -81,7 +80,7 @@ namespace TKDataPatcher
                 // Extract original entries as csv if they doesn't exist
                 string namcoCustomizeItemData = Path.Combine(CustomItemDataPath, "TEKKEN PROJECT");
 
-                if(!Directory.Exists(namcoCustomizeItemData))
+                if (!Directory.Exists(namcoCustomizeItemData))
                 {
                     Directory.CreateDirectory(namcoCustomizeItemData);
                     string fileName = Path.Combine(namcoCustomizeItemData, $"items.csv");
@@ -89,27 +88,24 @@ namespace TKDataPatcher
 
                     foreach (var entry in data.Entries)
                     {
-                        string fileNameOffset = entry.fileNameOffset == "\x00" ? "\\x00" : entry.fileNameOffset; 
+                        string fileNameOffset = entry.fileNameOffset == "\x00" ? "\\x00" : entry.fileNameOffset;
                         string keyOffset = entry.nameByString == "\x00" ? "\\x00" : entry.nameByString;
                         string nullOffset = entry.nullOffset == "\x00" ? "\\x00" : entry.nullOffset;
-
-                        /*sb.AppendLine($"{entry.index},{entry.packageIndex},{fileNameOffset},{entry.unk}," +
-                            $"{entry.unk2},{entry.unk3},{keyOffset},{entry.unk4}," +
-                            $"{entry.packageIndex2},{entry.unk5},{entry.unk6},{entry.itemFlagPackageIndex}," +
-                            $"{entry.itemCost},{entry.packageIndex3},{nullOffset},{entry.unk7}");*/
-                        sb.AppendLine($"{entry.itemId},{entry.packageIndex},{fileNameOffset},{entry.unk},{entry.charId},{entry.slotId},{entry.veryUnk}," +
-                                      $"{entry.nameById},{keyOffset},{entry.unk2},{entry.packageIndex2},{entry.unk3},{entry.playerCus},{entry.isColorable}," +
-                                      $"{entry.unk4},{entry.rarity},{entry.itemFlagPackageIndex},{entry.itemCost},{entry.packageIndex3},{nullOffset},{entry.unk7}");
+                        sb.AppendLine(
+                            $"{entry.itemId},{entry.packageIndex},{fileNameOffset},{entry.unk},{entry.charId},{entry.slotId},{entry.veryUnk}," +
+                            $"{entry.nameById},{keyOffset},{entry.unk2},{entry.packageIndex2},{entry.unk3},{entry.playerCus},{entry.isColorable}," +
+                            $"{entry.unk4},{entry.rarity},{entry.itemFlagPackageIndex},{entry.itemCost},{entry.packageIndex3},{nullOffset},{entry.unk7}");
                     }
 
                     File.WriteAllText(fileName, sb.ToString());
                 }
-                
+
 
                 Console.WriteLine("Patching files...");
                 // Patch items
                 var files = Directory.EnumerateFiles(CustomItemDataPath, "*.csv", SearchOption.AllDirectories);
-                if(files.Count() == 0)
+                var enumerable = files as string[] ?? files.ToArray();
+                if (!enumerable.Any())
                 {
                     Console.WriteLine("No files to patch.");
                     //goto termination;
@@ -118,7 +114,7 @@ namespace TKDataPatcher
                 //data = new CustomizeItemData(CustomizeItemDataPath);
                 List<ItemEntry> entriesToAdd = new List<ItemEntry>();
 
-                foreach(var file in files)
+                foreach (var file in enumerable)
                 {
                     string[] fileLines = File.ReadAllLines(file);
                     for (int i = 0; i < fileLines.Length; i++)
@@ -134,12 +130,6 @@ namespace TKDataPatcher
                             continue;
                         }
 
-                        /*if (data.Entries.Count(x => x.itemId == entry.itemId) > 0)
-                        {
-                            data.Entries = data.Entries.Where(x => x.itemId != entry.itemId).ToArray();
-                            Console.WriteLine($"[INFO]: The ID {entry.itemId} already exists in customize_item_data. Replacing...");
-                        }*/
-
                         entriesToAdd.Add(entry);
                         Console.WriteLine($"[INFO]: Adding file entry: {file} with the ID {entry.itemId}");
                     }
@@ -153,8 +143,6 @@ namespace TKDataPatcher
                 data.SaveAndDispose(CustomizeItemDataPath);
             }
 
-            //CustomizeItemData data = new CustomizeItemData(@"E:\Games\customize_item_data.bin");
-            
             termination: // ahahahahahahahahaha
                 Console.WriteLine(terminationString);
                 Console.ReadKey();
