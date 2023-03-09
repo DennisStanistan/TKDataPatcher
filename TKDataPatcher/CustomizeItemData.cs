@@ -45,6 +45,12 @@ namespace TKDataPatcher
                 {
                     return charId;
                 }
+
+                int slotId = s1.slotId.CompareTo(s2.slotId);
+                if(slotId != 0)
+                {
+                    return slotId;
+                }
                 
                 int item = s1.itemId.CompareTo(s2.itemId);
                 return item;
@@ -80,11 +86,14 @@ namespace TKDataPatcher
                 // Write null offset
                 uint nullOffset = (uint)writer.BaseStream.Position;
                 writer.Write((byte)0x00);
-                writer.Write((byte)0x00);
-                
                 for (int i = 0; i < strings.Count; i++)
                 {
                     byte[] bytes = Encoding.ASCII.GetBytes(strings[i]);
+
+                    if (strings[i] == "\\x00")
+                    {
+                        continue;
+                    }
 
                     stringDictionary.Add(strings[i], (uint)writer.BaseStream.Position);
                     writer.Write(bytes);
