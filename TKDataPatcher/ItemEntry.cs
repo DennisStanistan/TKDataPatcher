@@ -58,18 +58,6 @@ namespace TKDataPatcher
             packageIndex3 = int.Parse(split[18]);
             nullOffset = split[19];
             unk7 = int.Parse(split[20]);
-            /*unk2 = int.Parse(split[4]);
-            unk3 = int.Parse(split[5]);
-            keyOffset = split[6];
-            unk4 = int.Parse(split[7]);
-            packageIndex2 = int.Parse(split[8]);
-            unk5 = int.Parse(split[9]);
-            unk6 = int.Parse(split[10]);
-            itemFlagPackageIndex = int.Parse(split[11]);
-            itemCost = int.Parse(split[12]);
-            packageIndex3 = int.Parse(split[13]);
-            nullOffset = split[14];
-            unk7 = int.Parse(split[15]);*/
         }
 
         internal ItemEntry(IOMemoryStream stream)
@@ -95,18 +83,6 @@ namespace TKDataPatcher
             packageIndex3 = stream.ReadInt();
             nullOffset = stream.ReadStringOffset(stream.ReadUInt());
             unk7 = stream.ReadInt();
-            /*unk2 = stream.ReadInt(); // 0x10
-            unk3 = stream.ReadInt(); // 0x14
-            keyOffset = stream.ReadStringOffset(stream.ReadUInt()); // 0x18
-            unk4 = stream.ReadInt(); // 0x1C
-            packageIndex2 = stream.ReadInt(); // 0x20
-            unk5 = stream.ReadInt(); // 0x24
-            unk6 = stream.ReadInt(); // 0x28
-            itemFlagPackageIndex = stream.ReadInt(); // 0x2C
-            itemCost = stream.ReadInt(); // 0x30
-            packageIndex3 = stream.ReadInt(); // 0x34
-            nullOffset = stream.ReadStringOffset(stream.ReadUInt()); // 0x3C
-            unk7 = stream.ReadInt(); // 0x40*/
         }
     }
 

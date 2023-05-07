@@ -6,38 +6,24 @@ using System.Text;
 
 namespace TKDataPatcher
 {
-    public class CustomizeItemData
+    public class CustomizeItemData : BinListData
     {
-        internal ItemEntry[] Entries;
+        private ItemEntry[] _entries;
 
-        private IOMemoryStream _stream;
-
-        public CustomizeItemData(string path)
+        public override void ReadData()
         {
-            _stream = new IOMemoryStream(File.OpenRead(path))
+            _entries = new ItemEntry[Header.itemCount];
+            for(int i = 0; i < Header.itemCount; i++)
             {
-                Position = 0
-            };
-            
-            var header = new ItemDataHeader(_stream);
-
-            Entries = new ItemEntry[header.itemCount];
-            StringBuilder sb = new StringBuilder();
-            for(int i = 0; i < header.itemCount; i++)
-            {
-                Entries[i] = new ItemEntry(_stream);
+                _entries[i] = new ItemEntry(Stream);
             }
         }
 
-
-        public void SaveAndDispose(string path)
+        public override void Save(string path)
         {
-            _stream.Dispose();
-            _stream = null;
-
             // Sort items by ID
             // TODO: optimize this horrible mess
-            var list = Entries.ToList();
+            var list = _entries.ToList();
             list.Sort((s1, s2) =>
             {
                 int charId = s1.charId.CompareTo(s2.charId);
@@ -56,27 +42,27 @@ namespace TKDataPatcher
                 return item;
             });
             
-            Entries = list.ToArray();
+            _entries = list.ToArray();
 
             List<string> strings = new List<string>();
             Dictionary<string, uint> stringDictionary = new Dictionary<string, uint>();
-            for (int i = 0; i < Entries.Length; i++)
+            for (int i = 0; i < _entries.Length; i++)
             {
-                if(!strings.Exists(x => x == Entries[i].fileNameOffset))
+                if(!strings.Exists(x => x == _entries[i].fileNameOffset))
                 {
-                    strings.Add(Entries[i].fileNameOffset);
+                    strings.Add(_entries[i].fileNameOffset);
                 }
 
-                if (!strings.Exists(x => x == Entries[i].nameByString))
+                if (!strings.Exists(x => x == _entries[i].nameByString))
                 {
-                    strings.Add(Entries[i].nameByString);
+                    strings.Add(_entries[i].nameByString);
                 }
             }
 
             using (BinaryWriter writer = new BinaryWriter(File.Create(path)))
             {
                 writer.Write(new byte[0x10]);
-                writer.Write(new byte[Entries.Length * 0x40]);
+                writer.Write(new byte[_entries.Length * 0x40]);
                 
                 uint customizeItemDataOffset = (uint)writer.BaseStream.Position;
                 
@@ -105,14 +91,14 @@ namespace TKDataPatcher
                 // Write header
                 writer.Write(customizeItemDataOffset);
                 writer.Write((int)0x0);
-                writer.Write(Entries.Length);
+                writer.Write(_entries.Length);
                 writer.Write((int)0x0);
 
                 // write entries
-                for(int i = 0; i < Entries.Length; i++)
+                for(int i = 0; i < _entries.Length; i++)
                 {
                     // write 0x40 bytes of bullshit
-                    var entry = Entries[i];
+                    var entry = _entries[i];
                     
                     uint fileNameOffsetStr = stringDictionary.GetValueOrDefault(entry.fileNameOffset);
                     uint nameByStringStr = stringDictionary.GetValueOrDefault(entry.nameByString);
@@ -141,6 +127,62 @@ namespace TKDataPatcher
                 }
             }
         }
-        
+
+        public override void PatchCSVData(string path)
+        {
+            var files = Directory.EnumerateFiles(path, "*.csv", SearchOption.AllDirectories);
+            var enumerable = files as string[] ?? files.ToArray();
+            if (!enumerable.Any())
+            {
+                return;
+            }
+
+            List<ItemEntry> entriesToAdd = new List<ItemEntry>();
+            foreach (var file in enumerable)
+            {
+                string[] fileLines = File.ReadAllLines(file);
+
+                for (int i = 0; i < fileLines.Length; i++)
+                {
+                    ItemEntry entry;
+                    try
+                    {
+                        entry = new ItemEntry(fileLines[i]);
+                    }
+                    catch (Exception exception)
+                    {
+                        Log.Warning($"Could not parse line {i} in {file}. Skipping file. " + exception);
+                        continue;
+                    }
+                    
+                    entriesToAdd.Add(entry);
+                    Log.Info($"Adding file entry: {file} with the ID: {entry.itemId}");
+                }
+            }
+
+            _entries = entriesToAdd.ToArray();
+        }
+
+        public override void WriteCSVData(string path)
+        {
+            base.WriteCSVData(path);
+
+            string itemsFile = Path.Combine(path, "items.csv");
+            StringBuilder sb = new StringBuilder();
+
+            foreach (var entry in _entries)
+            {
+                string fileNameOffset = entry.fileNameOffset == "\x00" ? "\\x00" : entry.fileNameOffset;
+                string keyOffset = entry.nameByString == "\x00" ? "\\x00" : entry.nameByString;
+                string nullOffset = entry.nullOffset == "\x00" ? "\\x00" : entry.nullOffset;
+                
+                sb.AppendLine(
+                    $"{entry.itemId},{entry.packageIndex},{fileNameOffset},{entry.unk},{entry.charId},{entry.slotId},{entry.veryUnk}," +
+                    $"{entry.nameById},{keyOffset},{entry.unk2},{entry.packageIndex2},{entry.unk3},{entry.playerCus},{entry.isColorable}," +
+                    $"{entry.unk4},{entry.rarity},{entry.itemFlagPackageIndex},{entry.itemCost},{entry.packageIndex3},{nullOffset},{entry.unk7}");
+            }
+            
+            File.WriteAllText(itemsFile, sb.ToString());
+        }
     }
 }

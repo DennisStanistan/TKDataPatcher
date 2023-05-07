@@ -3,157 +3,119 @@ using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 
 namespace TKDataPatcher
 {
     class Program
     {
-        const string terminationString = "Press any key to close this window . . .";
-        static string BasePath;
-        static string BinaryPath;
-        static string TKDataBin;
-        static string TKDataBinBackup;
-        static string CustomizeItemDataBackupPath;
-        static string CustomizeItemDataPath;
-        static string CustomItemDataPath;
+        const string TerminationString = "Press any key to close this window . . .";
+        private static string _basePath;
+        private static string _binaryPath;
+        private static string _binListPath;
+        private static string _backupPath;
+        private static string _modDataPath;
+        private static string _tkDataBin;
+        private static string _tkDataBinBackup;
 
-        static void Main(string[] args)
+        private static readonly Dictionary<string, BinListData> SupportedBinLists = new Dictionary<string, BinListData>{
+            { "customize_item_data", new CustomizeItemData() },
+            //{ "stage_list_console", new StageListConsole() }
+        };
+
+        static bool Initialize()
         {
-            BasePath = Directory.GetCurrentDirectory();
-            BinaryPath = Path.Combine(BasePath, @"TekkenGame\Content\Binary");
-            TKDataBin = Path.Combine(BinaryPath, "tkdata.bin");
-            TKDataBinBackup = Path.Combine(BasePath, @"Backup\tkdata.bin");
-            CustomizeItemDataBackupPath = Path.Combine(BasePath, @"Backup\customize_item_data.bin");
-            CustomizeItemDataPath = Path.Combine(BinaryPath, @"list\customize_item_data.bin");
-            CustomItemDataPath = Path.Combine(BasePath, @"TekkenGame\Content\ModData\customize_item_data");
-
             if (!VerifyGamePath())
             {
-                Console.WriteLine(Path.Combine(BasePath, "TEKKEN 7.exe"));
-                Console.WriteLine("Please put the patcher files and the exe in the game's base directory (Where TEKKEN 7.exe is located) and restart the patcher.");
-                Console.WriteLine(terminationString);
-                Console.ReadKey();
-                return;
+                Log.Warning(Path.Combine(_basePath, "TEKKEN 7.exe"));
+                Log.Error("Please put the patcher files and the exe in the game's base directory (Where TEKKEN 7.exe is located) and restart the patcher.");
+                return false;
             }
-
-            // Create the ModData directory if it doesn't exist
-            if (!Directory.Exists(CustomItemDataPath)) Directory.CreateDirectory(CustomItemDataPath);
-
+            
             if (!File.Exists(@"Resources\tkdata.bms"))
             {
-                Console.WriteLine("The tkdata script file was not found.");
-                goto termination; // yes i am using goto, sue me fuckers
+                Log.Error("The tkdata script file was not found.");
+                return false;
             }
 
             if (!File.Exists(@"Resources\quickbms.exe"))
             {
-                Console.WriteLine("QuickBMS was not found.");
-                goto termination;
+                Log.Error("QuickBMS was not found.");
+                return false;
             }
 
-            if (File.Exists(TKDataBin)) // tkdata.bin exists, extract it
+            if (File.Exists(_tkDataBin)) // tkdata.bin exists, extract it
             {
                 var process = new Process() 
                 {
                     StartInfo = new ProcessStartInfo
                     {
                         FileName = @"Resources\quickbms.exe",
-                        Arguments = $"-o \"Resources\\tkdata.bms\" \"{TKDataBin}\" \"{BinaryPath}\""
+                        Arguments = $"-o \"Resources\\tkdata.bms\" \"{_tkDataBin}\" \"{_binaryPath}\""
                     }
                 };
                 process.Start();
                 process.WaitForExit();
+                
                 if(!Directory.Exists("Backup")) Directory.CreateDirectory("Backup");
-                File.Move(TKDataBin, TKDataBinBackup, true); // move tkdata.bin
-                File.Copy(CustomizeItemDataPath, CustomizeItemDataBackupPath, true);
+                
+                // Move tkdata.bin to backup directory
+                File.Move(_tkDataBin, _tkDataBinBackup, true);
             }
             
-            if(!File.Exists(CustomizeItemDataPath))
+            // Patch
+            for (int i = 0; i < SupportedBinLists.Count; i++)
             {
-                Console.WriteLine("Extraction failed.");
-                goto termination;
-            }
-            else
-            {
-                CustomizeItemData data = new CustomizeItemData(CustomizeItemDataBackupPath);
-                // Extract original entries as csv if they doesn't exist
-                string namcoCustomizeItemData = Path.Combine(CustomItemDataPath, "TEKKEN PROJECT");
+                BinListData data = SupportedBinLists.ElementAt(i).Value;
+                string name = SupportedBinLists.ElementAt(i).Key;
 
-                if (!Directory.Exists(namcoCustomizeItemData))
+                string csvDataPath = Path.Combine(_modDataPath, name);
+                string dataListPath = Path.Combine(_binListPath, $"{name}.bin");
+                string binListBackupFilePath = Path.Combine(_backupPath, $"{name}.bin");
+                
+                // Check if backup doesn't exist
+                if (!File.Exists(binListBackupFilePath))
                 {
-                    Directory.CreateDirectory(namcoCustomizeItemData);
-                    string fileName = Path.Combine(namcoCustomizeItemData, $"items.csv");
-                    StringBuilder sb = new StringBuilder();
-
-                    foreach (var entry in data.Entries)
-                    {
-                        string fileNameOffset = entry.fileNameOffset == "\x00" ? "\\x00" : entry.fileNameOffset;
-                        string keyOffset = entry.nameByString == "\x00" ? "\\x00" : entry.nameByString;
-                        string nullOffset = entry.nullOffset == "\x00" ? "\\x00" : entry.nullOffset;
-                        sb.AppendLine(
-                            $"{entry.itemId},{entry.packageIndex},{fileNameOffset},{entry.unk},{entry.charId},{entry.slotId},{entry.veryUnk}," +
-                            $"{entry.nameById},{keyOffset},{entry.unk2},{entry.packageIndex2},{entry.unk3},{entry.playerCus},{entry.isColorable}," +
-                            $"{entry.unk4},{entry.rarity},{entry.itemFlagPackageIndex},{entry.itemCost},{entry.packageIndex3},{nullOffset},{entry.unk7}");
-                    }
-
-                    File.WriteAllText(fileName, sb.ToString());
+                    File.Copy(dataListPath, binListBackupFilePath);
+                    // Backup the file and create a CSV file for it
+                    data.Initialize(binListBackupFilePath);
+                    data.ReadData();
+                    data.WriteCSVData(Path.Combine(csvDataPath, "TEKKEN PROJECT"));
                 }
 
-
-                Console.WriteLine("Patching files...");
-                // Patch items
-                var files = Directory.EnumerateFiles(CustomItemDataPath, "*.csv", SearchOption.AllDirectories);
-                var enumerable = files as string[] ?? files.ToArray();
-                if (!enumerable.Any())
-                {
-                    Console.WriteLine("No files to patch.");
-                    //goto termination;
-                }
-
-                //data = new CustomizeItemData(CustomizeItemDataPath);
-                List<ItemEntry> entriesToAdd = new List<ItemEntry>();
-
-                foreach (var file in enumerable)
-                {
-                    string[] fileLines = File.ReadAllLines(file);
-                    for (int i = 0; i < fileLines.Length; i++)
-                    {
-                        ItemEntry entry;
-                        try
-                        {
-                            entry = new ItemEntry(fileLines[i]);
-                        }
-                        catch
-                        {
-                            Console.WriteLine($"[ERROR]: Could not parse line {i} in: {file}. Skipping the file.");
-                            continue;
-                        }
-
-                        entriesToAdd.Add(entry);
-                        Console.WriteLine($"[INFO]: Adding file entry: {file} with the ID {entry.itemId}");
-                    }
-
-                }
-
-                // TODO: oh no
-                //var list = data.Entries.ToList();
-                //list.AddRange(entriesToAdd);
-                data.Entries = entriesToAdd.ToArray();
-                data.SaveAndDispose(CustomizeItemDataPath);
+                data.PatchCSVData(csvDataPath);
+                data.Save(dataListPath);
             }
 
-            termination: // ahahahahahahahahaha
-                Console.WriteLine(terminationString);
+            return true;
+        }
+        
+        static int Main(string[] args)
+        {
+            _basePath = Directory.GetCurrentDirectory();
+            _binaryPath = Path.Combine(_basePath, @"TekkenGame\Content\Binary");
+            _binListPath = Path.Combine(_basePath, @"TekkenGame\Content\Binary\list");
+            _modDataPath = Path.Combine(_basePath, @"TekkenGame\Content\ModData");
+            _tkDataBin = Path.Combine(_binaryPath, "tkdata.bin");
+            _backupPath = Path.Combine(_basePath, "Backup");
+            _tkDataBinBackup = Path.Combine(_backupPath, @"tkdata.bin");
+
+            if (!Initialize())
+            {
+                Console.WriteLine(TerminationString);
                 Console.ReadKey();
-                return;
+                return 1;
+            }
+
+            return 0;
         }
 
 
         public static bool VerifyGamePath()
         {
-            if (!Directory.Exists(BinaryPath)) { return false; }
-            if (!File.Exists(Path.Combine(BasePath, "TEKKEN 7.exe"))) return false;
+            if (!Directory.Exists(_binaryPath)) { return false; }
+            if (!File.Exists(Path.Combine(_basePath, "TEKKEN 7.exe"))) return false;
 
             return true;
         }
