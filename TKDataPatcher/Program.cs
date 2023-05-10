@@ -4,10 +4,18 @@ using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace TKDataPatcher
 {
+    enum ProgramRuntimePlatform : int
+    {
+        Windows,
+        Linux,
+        Unknown
+    }
+
     class Program
     {
         const string TerminationString = "Press any key to close this window . . .";
@@ -19,6 +27,10 @@ namespace TKDataPatcher
         private static string _tkDataBin;
         private static string _tkDataBinBackup;
 
+        private static string _quickbmsPath;
+
+        private static ProgramRuntimePlatform _runtimePlatform;
+        
         private static readonly Dictionary<string, BinListData> SupportedBinLists = new Dictionary<string, BinListData>{
             { "customize_item_data", new CustomizeItemData() },
             //{ "stage_list_console", new StageListConsole() }
@@ -33,26 +45,27 @@ namespace TKDataPatcher
                 return false;
             }
             
-            if (!File.Exists(@"Resources\tkdata.bms"))
+            if (!File.Exists(GetPlatformFriendlyPath(@"Resources\tkdata.bms")))
             {
                 Log.Error("The tkdata script file was not found.");
                 return false;
             }
 
-            if (!File.Exists(@"Resources\quickbms.exe"))
+            if (!File.Exists(_quickbmsPath))
             {
-                Log.Error("QuickBMS was not found.");
+                Log.Error($"The path for QuickBMS: \"{_quickbmsPath}\" was not found.");
                 return false;
             }
 
             if (File.Exists(_tkDataBin)) // tkdata.bin exists, extract it
             {
+                string _tkDataBms = GetPlatformFriendlyPath(@"Resources\tkdata.bms");
                 var process = new Process() 
                 {
                     StartInfo = new ProcessStartInfo
                     {
-                        FileName = @"Resources\quickbms.exe",
-                        Arguments = $"-o \"Resources\\tkdata.bms\" \"{_tkDataBin}\" \"{_binaryPath}\""
+                        FileName = _quickbmsPath,
+                        Arguments = $"-o \"{_tkDataBms}\" \"{_tkDataBin}\" \"{_binaryPath}\""
                     }
                 };
                 process.Start();
@@ -90,16 +103,34 @@ namespace TKDataPatcher
 
             return true;
         }
+
+        static void CheckRuntimePlatform()
+        {
+            _runtimePlatform = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? ProgramRuntimePlatform.Windows
+                : RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                    ? ProgramRuntimePlatform.Linux
+                    : ProgramRuntimePlatform.Unknown;
+        }
+
+        static string GetPlatformFriendlyPath(string path) {
+            return path.Replace('\\', Path.DirectorySeparatorChar);
+        }
         
         static int Main(string[] args)
         {
+            CheckRuntimePlatform();
+            
             _basePath = Directory.GetCurrentDirectory();
-            _binaryPath = Path.Combine(_basePath, @"TekkenGame\Content\Binary");
-            _binListPath = Path.Combine(_basePath, @"TekkenGame\Content\Binary\list");
-            _modDataPath = Path.Combine(_basePath, @"TekkenGame\Content\ModData");
+            _binaryPath = Path.Combine(_basePath, GetPlatformFriendlyPath(@"TekkenGame\Content\Binary"));
+            _binListPath = Path.Combine(_basePath, GetPlatformFriendlyPath(@"TekkenGame\Content\Binary\list"));
+            _modDataPath = Path.Combine(_basePath, GetPlatformFriendlyPath(@"TekkenGame\Content\ModData"));
             _tkDataBin = Path.Combine(_binaryPath, "tkdata.bin");
             _backupPath = Path.Combine(_basePath, "Backup");
             _tkDataBinBackup = Path.Combine(_backupPath, @"tkdata.bin");
+
+            _quickbmsPath = _runtimePlatform == ProgramRuntimePlatform.Windows 
+                ? GetPlatformFriendlyPath(@"Resources\quickbms.exe") : GetPlatformFriendlyPath(@"Resources\quickbms");
 
             if (!Initialize())
             {
@@ -110,63 +141,22 @@ namespace TKDataPatcher
 
             return 0;
         }
-
-
+        
         public static bool VerifyGamePath()
         {
-            if (!Directory.Exists(_binaryPath)) { return false; }
-            if (!File.Exists(Path.Combine(_basePath, "TEKKEN 7.exe"))) return false;
+            if (!Directory.Exists(_binaryPath)) { 
+                Log.Error($"The directory: {_binaryPath} does not exist");
+                return false; 
+            }
+
+            string tekken7ExePath = Path.Combine(_basePath, "TEKKEN 7.exe");
+
+            if (!File.Exists(tekken7ExePath)) {
+                Log.Error($"The file: {tekken7ExePath} does not exist");
+                return false;
+            }
 
             return true;
-        }
-
-        public static IEnumerable<int> PatternAt(byte[] source, byte[] pattern, int offset)
-        {
-            for (int i = offset; i < source.Length; i++)
-            {
-                if (source.Skip((int)i).Take(pattern.Length).SequenceEqual(pattern))
-                {
-                    yield return i;
-                }
-            }
-
-            yield return 0;
-        }
-
-        public static unsafe int IndexOfPattern(byte[] src, byte[] pattern)
-        {
-            fixed (byte* srcPtr = &src[0])
-            fixed (byte* patternPtr = &pattern[0])
-            {
-                for (int x = 0; x < src.Length; x++)
-                {
-                    byte currentValue = *(srcPtr + x);
-
-                    if (currentValue != *patternPtr) continue;
-
-                    bool match = false;
-
-                    for (int y = 0; y < pattern.Length; y++)
-                    {
-                        byte tempValue = *(srcPtr + x + y);
-                        if (tempValue != *(patternPtr + y))
-                        {
-                            match = false;
-                            break;
-                        }
-
-                        match = true;
-                    }
-
-                    if (match)
-                    {
-                        return x;
-                    }
-
-                }
-            }
-
-            return -1;
         }
     }
 }

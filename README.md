@@ -6,3 +6,7 @@ Uses .NET Core 3.1
 ## Download
 Download the latest version from [TekkenMods](https://tekkenmods.com/mod/2301/tkdatapatcher)
 
+## Publishing
+```bash
+dotnet publish --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output ./publish
+```
